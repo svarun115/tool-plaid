@@ -33,8 +33,8 @@ If `python3.12` is missing: `sudo apt install -y python3.12 python3.12-venv`.
 cat > .env.agent <<'EOF'
 PLAID_ENV=sandbox
 PLAID_CLIENT_ID=<plaid-client-id>
-PLAID_SECRET=<plaid-secret>
-ENCRYPTION_KEY=<fernet-key>
+PLAID_SECRET=<plaid-secret>           # from Plaid dashboard, matching PLAID_ENV
+ENCRYPTION_KEY=<fernet-key>           # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 STORAGE_MODE=file
 MCP_TRANSPORT=streamable-http
 MCP_PORT=7777
