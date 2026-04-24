@@ -1,0 +1,18 @@
+[Unit]
+Description=MCP server for Plaid (personal finance)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/assistant/mcp-servers/plaid-mcp-server
+EnvironmentFile=/home/ubuntu/assistant/mcp-servers/plaid-mcp-server/.env.agent
+ExecStart=/home/ubuntu/assistant/mcp-servers/plaid-mcp-server/.venv/bin/plaid-tool
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

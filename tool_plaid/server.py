@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from tool_plaid.utils.logging import setup_logging
 from tool_plaid.config import Config
@@ -31,7 +32,16 @@ logger = logging.getLogger(__name__)
 
 # Create MCP server
 mcp = FastMCP(
-    "Plaid Tool", instructions="Sync transactions and get account balances from Plaid"
+    "Plaid Tool",
+    instructions="Sync transactions and get account balances from Plaid",
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=[
+            "assistant-vm.eastus.cloudapp.azure.com",
+            "127.0.0.1:*",
+            "localhost:*",
+        ],
+        allowed_origins=["https://assistant-vm.eastus.cloudapp.azure.com"],
+    ),
 )
 
 # Register tools
@@ -50,7 +60,11 @@ def main() -> None:
         logger.info(f"Storage mode: {config.STORAGE_MODE}")
         logger.info(f"Transport: {config.MCP_TRANSPORT}")
 
-        # Run MCP server with configured transport
+        if config.MCP_TRANSPORT == "streamable-http":
+            mcp.settings.host = "127.0.0.1"
+            mcp.settings.port = config.MCP_PORT
+            logger.info(f"Binding {mcp.settings.host}:{mcp.settings.port}")
+
         mcp.run(transport=config.MCP_TRANSPORT)
 
     except ValueError as e:
