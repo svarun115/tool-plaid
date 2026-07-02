@@ -178,6 +178,78 @@ class PlaidClient:
             logger.error(f"Failed to sync transactions: {e}")
             raise
 
+    async def get_transactions_by_date(
+        self,
+        access_token: str,
+        start_date: str,
+        end_date: str,
+        count: int = 500,
+    ) -> dict:
+        """
+        Fetch transactions for an explicit date range via Plaid's /transactions/get.
+
+        Unlike sync_transactions (cursor-based, opaque local bookkeeping of "what's
+        already been consumed"), this is a direct, stateless date-range query — the
+        caller decides exactly what window to pull every time, which:
+          - lets any past date range be re-queried on demand (a cursor can only move
+            forward; it can't be asked "what happened in March again")
+          - naturally handles retroactively-settled/backdated transactions, since
+            re-querying a recent window will surface updates to those transactions
+          - never gets stuck: a malformed record only affects itself (see
+            _build_transaction), never an entire opaque page tied to unrecoverable
+            cursor state
+
+        Args:
+            access_token: Plaid access token
+            start_date: ISO date (YYYY-MM-DD), inclusive
+            end_date: ISO date (YYYY-MM-DD), inclusive
+            count: Page size per request (Plaid max 500)
+
+        Returns:
+            Dictionary with all transactions in range, total_transactions, skipped_count
+        """
+        logger.debug(f"Fetching transactions {start_date} to {end_date}")
+
+        all_raw = []
+        offset = 0
+        total_transactions = None
+
+        try:
+            while total_transactions is None or offset < total_transactions:
+                request = {
+                    "access_token": access_token,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "options": {"count": count, "offset": offset},
+                }
+                response = await asyncio.to_thread(
+                    self.api_client.transactions_get, request
+                )
+                page = response.get("transactions", [])
+                all_raw.extend(page)
+                total_transactions = response.get("total_transactions", len(all_raw))
+                offset += len(page)
+                if not page:
+                    break  # safety: avoid infinite loop if Plaid returns an empty page early
+
+            transactions = [t for t in (_build_transaction(tx) for tx in all_raw) if t is not None]
+            skipped_count = len(all_raw) - len(transactions)
+            if skipped_count:
+                logger.error(
+                    f"get_transactions_by_date skipped {skipped_count} malformed "
+                    f"transaction(s) out of {len(all_raw)} in range {start_date}..{end_date} "
+                    f"— see prior error logs for transaction_ids."
+                )
+
+            return {
+                "transactions": transactions,
+                "total_transactions": total_transactions,
+                "skipped_count": skipped_count,
+            }
+        except Exception as e:
+            logger.error(f"Failed to get transactions by date: {e}")
+            raise
+
     async def get_balance(
         self, access_token: str, account_ids: Optional[List[str]] = None, **kwargs
     ) -> List[AccountBalance]:

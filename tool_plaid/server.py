@@ -11,6 +11,7 @@ from tool_plaid.utils.logging import setup_logging
 from tool_plaid.config import Config
 from tool_plaid.tools.transactions import (
     sync_transactions,
+    get_transactions_by_date,
     get_balance,
     exchange_public_token,
 )
@@ -47,6 +48,7 @@ mcp = FastMCP(
 # Register tools
 mcp.tool()(exchange_public_token)
 mcp.tool()(sync_transactions)
+mcp.tool()(get_transactions_by_date)
 mcp.tool()(get_balance)
 
 
