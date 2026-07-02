@@ -14,6 +14,16 @@ from tool_plaid.plaid.models import Transaction, AccountBalance
 logger = logging.getLogger(__name__)
 
 
+def _normalize_category(category) -> str:
+    """Plaid may return category as a legacy hierarchy list (e.g. ["Travel", "Parking"])
+    or as a plain string depending on the account/product. Flatten to a single string."""
+    if not category:
+        return ""
+    if isinstance(category, (list, tuple)):
+        return ", ".join(str(c) for c in category if c)
+    return str(category)
+
+
 class PlaidClient:
     """Async wrapper around Plaid Python SDK (v38.0.0+)"""
 
@@ -124,7 +134,7 @@ class PlaidClient:
                     amount=float(tx.amount),
                     date=tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
                     merchant_name=tx.merchant_name or "",
-                    category=tx.category or "",
+                    category=_normalize_category(tx.category),
                     pending=tx.pending or False,
                 )
                 for tx in response.get("added", [])
@@ -137,7 +147,7 @@ class PlaidClient:
                     amount=float(tx.amount),
                     date=tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
                     merchant_name=tx.merchant_name or "",
-                    category=tx.category or "",
+                    category=_normalize_category(tx.category),
                     pending=tx.pending or False,
                 )
                 for tx in response.get("modified", [])
