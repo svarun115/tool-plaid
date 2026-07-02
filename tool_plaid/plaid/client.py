@@ -24,6 +24,28 @@ def _normalize_category(category) -> str:
     return str(category)
 
 
+def _build_transaction(tx) -> Optional[Transaction]:
+    """Convert a raw Plaid transaction into our schema. Returns None (and logs) instead of
+    raising, so one malformed record can't take down an entire sync page — a single bad
+    transaction previously caused the whole page to be silently dropped and unrecoverable
+    once Plaid's cursor advanced past it."""
+    try:
+        return Transaction(
+            transaction_id=tx.transaction_id,
+            account_id=tx.account_id,
+            amount=float(tx.amount),
+            date=tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
+            merchant_name=tx.merchant_name or "",
+            category=_normalize_category(tx.category),
+            pending=tx.pending or False,
+        )
+    except Exception as e:
+        logger.error(
+            f"Skipping malformed transaction {getattr(tx, 'transaction_id', '<unknown>')}: {e}"
+        )
+        return None
+
+
 class PlaidClient:
     """Async wrapper around Plaid Python SDK (v38.0.0+)"""
 
@@ -126,32 +148,20 @@ class PlaidClient:
                 self.api_client.transactions_sync, request
             )
 
-            # Convert Plaid models to our schema
-            added = [
-                Transaction(
-                    transaction_id=tx.transaction_id,
-                    account_id=tx.account_id,
-                    amount=float(tx.amount),
-                    date=tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
-                    merchant_name=tx.merchant_name or "",
-                    category=_normalize_category(tx.category),
-                    pending=tx.pending or False,
-                )
-                for tx in response.get("added", [])
-            ]
+            # Convert Plaid models to our schema. Build per-transaction so a single
+            # malformed record is skipped (and logged) instead of failing the whole page.
+            raw_added = response.get("added", [])
+            raw_modified = response.get("modified", [])
 
-            modified = [
-                Transaction(
-                    transaction_id=tx.transaction_id,
-                    account_id=tx.account_id,
-                    amount=float(tx.amount),
-                    date=tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
-                    merchant_name=tx.merchant_name or "",
-                    category=_normalize_category(tx.category),
-                    pending=tx.pending or False,
+            added = [t for t in (_build_transaction(tx) for tx in raw_added) if t is not None]
+            modified = [t for t in (_build_transaction(tx) for tx in raw_modified) if t is not None]
+
+            skipped_count = (len(raw_added) - len(added)) + (len(raw_modified) - len(modified))
+            if skipped_count:
+                logger.error(
+                    f"sync_transactions skipped {skipped_count} malformed transaction(s) "
+                    f"this page — see prior error logs for transaction_ids."
                 )
-                for tx in response.get("modified", [])
-            ]
 
             removed = [tx.transaction_id for tx in response.get("removed", [])]
 
@@ -162,6 +172,7 @@ class PlaidClient:
                 "next_cursor": response.get("next_cursor", ""),
                 "has_more": response.get("has_more", False),
                 "item_status": response.get("item_status", "UNKNOWN"),
+                "skipped_count": skipped_count,
             }
         except Exception as e:
             logger.error(f"Failed to sync transactions: {e}")

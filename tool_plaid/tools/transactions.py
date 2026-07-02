@@ -36,6 +36,10 @@ class SyncTransactionsResponse(BaseModel):
     has_more: bool = Field(default=False)
     item_status: str = Field(default="")
     summary: str = Field(default="")
+    skipped_count: int = Field(
+        default=0,
+        description="Malformed transactions skipped this page (logged server-side, not recoverable via re-sync)",
+    )
 
 
 class GetBalanceInput(BaseModel):
@@ -205,7 +209,11 @@ async def sync_transactions(
     if result["removed"]:
         summary_parts.append(f"Removed {len(result['removed'])}")
 
-    summary = ", ".join(summary_parts) + " transactions"
+    summary = (", ".join(summary_parts) + " transactions") if summary_parts else "No transactions"
+
+    skipped_count = result.get("skipped_count", 0)
+    if skipped_count:
+        summary += f" ({skipped_count} malformed transaction(s) skipped this page — see server logs)"
 
     logger.info(f"sync_transactions completed: {summary}")
 
@@ -217,6 +225,7 @@ async def sync_transactions(
         has_more=result["has_more"],
         item_status=result["item_status"],
         summary=summary,
+        skipped_count=skipped_count,
     )
 
 
