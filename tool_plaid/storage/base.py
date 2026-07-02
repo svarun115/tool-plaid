@@ -10,16 +10,6 @@ class StorageBackend(ABC):
     """Abstract storage backend interface."""
 
     @abstractmethod
-    async def get_cursor(self, item_id: str) -> Optional[str]:
-        """Get stored cursor for an item."""
-        pass
-
-    @abstractmethod
-    async def set_cursor(self, item_id: str, cursor: str) -> None:
-        """Store cursor for an item."""
-        pass
-
-    @abstractmethod
     async def add_transactions(
         self, item_id: str, transactions: List[Transaction]
     ) -> None:

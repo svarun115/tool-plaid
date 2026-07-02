@@ -1,6 +1,6 @@
 The purpose of this repo is to make an Agent that can expose the following tools:
 
-- sync_transactions
+- get_transactions_by_date
 - get_balance
 
 It should be able to manage auth using secure practices. 

@@ -15,7 +15,7 @@ To run:
 import asyncio
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -88,31 +88,25 @@ async def test_e2e_flow(public_token: str):
         traceback.print_exc()
         return False
 
-    # Step 3: Sync transactions
-    print("📊 Step 3: Syncing transactions...")
+    # Step 3: Get transactions by date
+    print("📊 Step 3: Fetching transactions by date range...")
     try:
-        result = await plaid_client.sync_transactions(
+        end_date = datetime.utcnow().strftime("%Y-%m-%d")
+        start_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+        result = await plaid_client.get_transactions_by_date(
             access_token=access_token,
-            cursor=None,
-            count=100,
-            days_requested=30
+            start_date=start_date,
+            end_date=end_date,
         )
 
-        print(f"✅ Transactions synced successfully!")
-        print(f"   Added: {len(result['added'])}")
-        print(f"   Modified: {len(result['modified'])}")
-        print(f"   Removed: {len(result['removed'])}")
-        print(f"   Has more: {result['has_more']}")
-        print(f"   Item status: {result['item_status']}")
-        print()
-
-        # Store cursor
-        await storage.set_cursor(item_id, result['next_cursor'])
-        print(f"✅ Cursor stored: {result['next_cursor'][:30]}...")
+        print(f"✅ Transactions fetched successfully!")
+        print(f"   Transactions: {len(result['transactions'])}")
+        print(f"   Total available: {result['total_transactions']}")
+        print(f"   Skipped (malformed): {result['skipped_count']}")
         print()
 
     except Exception as e:
-        print(f"❌ Failed to sync transactions: {e}")
+        print(f"❌ Failed to fetch transactions: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -162,11 +156,11 @@ async def test_e2e_flow(public_token: str):
     print("=" * 60)
     print()
     print(f"Item ID: {item_id}")
-    print(f"Transactions synced: {len(result['added']) + len(result['modified'])}")
+    print(f"Transactions fetched: {len(result['transactions'])}")
     print(f"Accounts retrieved: {len(balances)}")
     print()
     print("💡 You can now test the MCP tools:")
-    print(f"   sync_transactions(item_id='{item_id}')")
+    print(f"   get_transactions_by_date(item_id='{item_id}', start_date='...', end_date='...')")
     print(f"   get_balance(item_id='{item_id}')")
     print()
     print("To clean up:")

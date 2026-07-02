@@ -32,24 +32,6 @@ class FileStorage(StorageBackend):
         item_dir.mkdir(parents=True, exist_ok=True)
         return item_dir
 
-    async def get_cursor(self, item_id: str) -> Optional[str]:
-        """Get stored cursor for an item."""
-        item_dir = self._get_item_dir(item_id)
-        cursor_file = item_dir / "cursor.txt"
-
-        if cursor_file.exists():
-            cursor = cursor_file.read_text().strip()
-            logger.debug(f"Retrieved cursor for {item_id}: {cursor}")
-            return cursor
-        return None
-
-    async def set_cursor(self, item_id: str, cursor: str) -> None:
-        """Store cursor for an item."""
-        item_dir = self._get_item_dir(item_id)
-        cursor_file = item_dir / "cursor.txt"
-        cursor_file.write_text(cursor)
-        logger.debug(f"Stored cursor for {item_id}")
-
     async def add_transactions(
         self, item_id: str, transactions: List[Transaction]
     ) -> None:

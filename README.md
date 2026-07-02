@@ -1,7 +1,7 @@
 # Tool-Plaid: MCP Server for Plaid
 
 MCP (Model Context Protocol) server tool that exposes two tools for interacting with Plaid's financial data API:
-- `sync_transactions` - Retrieve and sync transaction data
+- `get_transactions_by_date` - Fetch transactions for an explicit date range
 - `get_balance` - Get account balances
 
 ## Installation
@@ -121,19 +121,19 @@ Add this to your MCP configuration file (e.g., `claude_desktop_config.json`):
 
 ## Tools
 
-### sync_transactions
+### get_transactions_by_date
 
-Sync transactions from Plaid using cursor-based incremental updates.
+Fetch transactions for an explicit date range via Plaid's `/transactions/get`. Stateless — no server-side cursor or bookkeeping; re-querying any past window (even one already fetched) always returns the same data, which makes it safe to re-check for retroactively-settled/backdated transactions. Pagination is handled internally.
 
 **Parameters:**
 - `item_id` (required): Plaid item identifier
-- `force_refresh` (optional, default=False): Trigger Plaid refresh
-- `days_requested` (optional, default=90, range 1-730): Days of history
+- `start_date` (required): Start date, inclusive (YYYY-MM-DD)
+- `end_date` (required): End date, inclusive (YYYY-MM-DD)
 
 **Returns:**
 ```json
 {
-  "added": [
+  "transactions": [
     {
       "transaction_id": "string",
       "account_id": "string",
@@ -144,12 +144,10 @@ Sync transactions from Plaid using cursor-based incremental updates.
       "pending": false
     }
   ],
-  "modified": [...],
-  "removed": ["transaction_id_1", "transaction_id_2"],
-  "next_cursor": "cursor_string",
-  "has_more": false,
-  "item_status": "HISTORICAL_UPDATE_COMPLETE",
-  "summary": "Added 10, modified 2, removed 1 transactions"
+  "total_transactions": 42,
+  "item_status": "OK",
+  "summary": "42 of 42 transactions (2025-01-01..2025-01-31)",
+  "skipped_count": 0
 }
 ```
 
