@@ -24,6 +24,10 @@ def _normalize_category(category) -> str:
     return str(category)
 
 
+def _format_date(d) -> str:
+    return d.isoformat() if hasattr(d, "isoformat") else str(d) if d else ""
+
+
 def _build_transaction(tx) -> Optional[Transaction]:
     """Convert a raw Plaid transaction into our schema. Returns None (and logs) instead of
     raising, so one malformed record can't take down an entire sync page — a single bad
@@ -34,7 +38,12 @@ def _build_transaction(tx) -> Optional[Transaction]:
             transaction_id=tx.transaction_id,
             account_id=tx.account_id,
             amount=float(tx.amount),
-            date=tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
+            date=_format_date(tx.date),
+            # `date` is the bank's posting date for posted transactions (can lag the actual
+            # purchase by a few days). `authorized_date` reflects when the user actually made
+            # the transaction — prefer it downstream. Not all institutions populate it, so this
+            # can be empty; callers should fall back to `date` in that case.
+            authorized_date=_format_date(getattr(tx, "authorized_date", None)),
             merchant_name=tx.merchant_name or "",
             category=_normalize_category(tx.category),
             pending=tx.pending or False,
