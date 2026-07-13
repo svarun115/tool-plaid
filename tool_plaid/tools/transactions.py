@@ -4,6 +4,7 @@ import logging
 from typing import List, Optional
 from datetime import datetime
 
+from mcp.server.fastmcp import Context
 from pydantic import BaseModel, Field
 
 from tool_plaid.plaid.client import PlaidClient
@@ -11,9 +12,26 @@ from tool_plaid.plaid.models import Transaction, AccountBalance
 from tool_plaid.storage.base import StorageBackend
 from tool_plaid.storage.file import FileStorage
 from tool_plaid.auth.tokens import TokenManager
+from tool_plaid.auth.ownership import ItemOwnership, ItemAccessDeniedError
 from tool_plaid.config import Config
 
 logger = logging.getLogger(__name__)
+
+
+def _caller_user_id(ctx: Context) -> Optional[str]:
+    """Extract the gateway-resolved identity from the current request.
+
+    ctx is FastMCP-injected (excluded from the tool's public schema, callers
+    never pass it themselves). `ctx.request_context` is always set once a
+    tool call is genuinely in progress, regardless of transport -- it's
+    `.request` (the raw HTTP request) that's None in stdio mode, since stdio
+    has no HTTP headers at all. That case correctly returns None here, which
+    ItemOwnership.is_owner treats as "no access", never a default identity.
+    """
+    request = ctx.request_context.request
+    if request is None:
+        return None
+    return request.headers.get("x-user-id")
 
 
 class GetBalanceInput(BaseModel):
@@ -76,6 +94,7 @@ class ExchangeTokenResponse(BaseModel):
 
 async def exchange_public_token(
     public_token: str,
+    ctx: Context,
     institution_name: Optional[str] = None,
 ) -> ExchangeTokenResponse:
     """
@@ -93,9 +112,16 @@ async def exchange_public_token(
     """
     logger.info("exchange_public_token called")
 
+    user_id = _caller_user_id(ctx)
+    if user_id is None:
+        return ExchangeTokenResponse(
+            item_id="", success=False, error="No caller identity resolved -- cannot attribute ownership of a newly-linked item"
+        )
+
     config = Config.load()
     plaid_client = PlaidClient(config)
     token_manager = TokenManager(config.data_dir, config.ENCRYPTION_KEY)
+    ownership = ItemOwnership(config.data_dir)
 
     try:
         result = await plaid_client.exchange_public_token(public_token)
@@ -108,8 +134,9 @@ async def exchange_public_token(
             item_id=item_id,
             metadata=metadata,
         )
+        await ownership.record_ownership(user_id, item_id)
 
-        logger.info(f"Token exchanged and stored for item_id: {item_id}")
+        logger.info(f"Token exchanged and stored for item_id: {item_id}, owner: {user_id}")
         return ExchangeTokenResponse(item_id=item_id, success=True)
 
     except Exception as e:
@@ -121,6 +148,7 @@ async def get_transactions_by_date(
     item_id: str,
     start_date: str,
     end_date: str,
+    ctx: Context,
 ) -> GetTransactionsByDateResponse:
     """
     Fetch all transactions for an item within an explicit date range.
@@ -148,6 +176,11 @@ async def get_transactions_by_date(
     token_manager = TokenManager(config.data_dir, config.ENCRYPTION_KEY)
     storage = FileStorage(config.data_dir)
     plaid_client = PlaidClient(config)
+    ownership = ItemOwnership(config.data_dir)
+
+    user_id = _caller_user_id(ctx)
+    if not await ownership.is_owner(user_id, item_id, legacy_owner=config.LEGACY_ITEM_OWNER):
+        raise ItemAccessDeniedError(f"{user_id or 'unknown caller'} is not authorized for item {item_id}")
 
     access_token = await token_manager.get_token(item_id)
     if not access_token:
@@ -191,6 +224,7 @@ async def get_transactions_by_date(
 
 async def get_balance(
     item_id: str,
+    ctx: Context,
     account_ids: Optional[List[str]] = None,
     force_refresh: bool = False,
 ) -> GetBalanceResponse:
@@ -211,6 +245,11 @@ async def get_balance(
     token_manager = TokenManager(config.data_dir, config.ENCRYPTION_KEY)
     storage = FileStorage(config.data_dir)
     plaid_client = PlaidClient(config)
+    ownership = ItemOwnership(config.data_dir)
+
+    user_id = _caller_user_id(ctx)
+    if not await ownership.is_owner(user_id, item_id, legacy_owner=config.LEGACY_ITEM_OWNER):
+        raise ItemAccessDeniedError(f"{user_id or 'unknown caller'} is not authorized for item {item_id}")
 
     # Get access token
     access_token = await token_manager.get_token(item_id)
