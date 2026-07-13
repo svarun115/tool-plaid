@@ -49,6 +49,7 @@ class Config:
     MCP_TRANSPORT: str = "stdio"
     MCP_PORT: int = 8000
     BALANCE_CACHE_TTL: int = 300  # 5 minutes in seconds
+    LEGACY_ITEM_OWNER: Optional[str] = None  # attributes pre-ownership-tracking items; see auth/ownership.py
 
     @classmethod
     def load(cls) -> "Config":
@@ -67,6 +68,7 @@ class Config:
         config.MCP_TRANSPORT = get_env("MCP_TRANSPORT", "stdio")
         config.MCP_PORT = get_env_int("MCP_PORT", 8000)
         config.BALANCE_CACHE_TTL = get_env_int("BALANCE_CACHE_TTL", 300)
+        config.LEGACY_ITEM_OWNER = os.getenv("LEGACY_ITEM_OWNER")
 
         return config
 
