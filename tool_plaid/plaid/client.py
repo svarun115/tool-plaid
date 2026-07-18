@@ -88,6 +88,46 @@ class PlaidClient:
             return "https://sandbox.plaid.com"
         return "https://production.plaid.com"
 
+    async def create_link_token(self, user_id: str, redirect_uri: Optional[str] = None) -> str:
+        """
+        Mint a Plaid Link token for `user_id` (#146's self-serve connect
+        leg -- the gateway's hosted Link page uses this to initialize the
+        Link JS SDK). Mirrors scripts/link_flow.py's request shape;
+        `redirect_uri` is optional and only needed for OAuth-based
+        institutions, which require it pre-registered in the Plaid
+        dashboard (see SELF_SERVE_AUTH_PLAN.md Phase D).
+
+        Args:
+            user_id: Plaid's client_user_id -- this repo's own user_id
+                (the same identity ItemOwnership.record_ownership uses),
+                not a Plaid-internal id.
+            redirect_uri: Registered OAuth redirect URI, if applicable.
+
+        Returns:
+            The link_token string.
+
+        Raises:
+            Exception: If minting fails.
+        """
+        logger.info(f"Creating link token for user_id: {user_id}")
+
+        request = {
+            "user": {"client_user_id": user_id},
+            "client_name": "tool-plaid",
+            "products": ["transactions"],
+            "country_codes": ["US"],
+            "language": "en",
+        }
+        if redirect_uri:
+            request["redirect_uri"] = redirect_uri
+
+        try:
+            response = await asyncio.to_thread(self.api_client.link_token_create, request)
+            return response["link_token"]
+        except Exception as e:
+            logger.error(f"Failed to create link token: {e}")
+            raise
+
     async def exchange_public_token(self, public_token: str) -> dict:
         """
         Exchange public token for access token.
