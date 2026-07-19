@@ -92,27 +92,21 @@ class ExchangeTokenResponse(BaseModel):
     error: Optional[str] = Field(default=None)
 
 
-async def exchange_public_token(
+async def perform_exchange(
+    user_id: Optional[str],
     public_token: str,
-    ctx: Context,
     institution_name: Optional[str] = None,
 ) -> ExchangeTokenResponse:
     """
-    Exchange a Plaid Link public_token for an access_token and store it securely.
-
-    Call this after Plaid Link completes successfully. The public_token expires
-    in 30 minutes, so exchange it promptly.
-
-    Args:
-        public_token: The public_token from Plaid Link's onSuccess callback
-        institution_name: Optional name of the linked institution for metadata
-
-    Returns:
-        ExchangeTokenResponse with item_id for future API calls
+    The actual exchange+store+ownership work, factored out of the
+    exchange_public_token MCP tool so #146's internal /internal/exchange
+    route (called by mcp-auth-gateway's hosted Plaid Link page, which has
+    no MCP Context to extract a caller identity from) can share it. Takes
+    `user_id` directly rather than a Context -- callers are responsible
+    for resolving identity their own way (the MCP tool via
+    _caller_user_id/X-User-Id, the internal route via the gateway's
+    already-validated connect-state record).
     """
-    logger.info("exchange_public_token called")
-
-    user_id = _caller_user_id(ctx)
     if user_id is None:
         return ExchangeTokenResponse(
             item_id="", success=False, error="No caller identity resolved -- cannot attribute ownership of a newly-linked item"
@@ -142,6 +136,28 @@ async def exchange_public_token(
     except Exception as e:
         logger.error(f"Failed to exchange public token: {e}")
         return ExchangeTokenResponse(item_id="", success=False, error=str(e))
+
+
+async def exchange_public_token(
+    public_token: str,
+    ctx: Context,
+    institution_name: Optional[str] = None,
+) -> ExchangeTokenResponse:
+    """
+    Exchange a Plaid Link public_token for an access_token and store it securely.
+
+    Call this after Plaid Link completes successfully. The public_token expires
+    in 30 minutes, so exchange it promptly.
+
+    Args:
+        public_token: The public_token from Plaid Link's onSuccess callback
+        institution_name: Optional name of the linked institution for metadata
+
+    Returns:
+        ExchangeTokenResponse with item_id for future API calls
+    """
+    logger.info("exchange_public_token called")
+    return await perform_exchange(_caller_user_id(ctx), public_token, institution_name)
 
 
 async def get_transactions_by_date(

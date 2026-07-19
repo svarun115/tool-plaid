@@ -50,6 +50,7 @@ class Config:
     MCP_PORT: int = 8000
     BALANCE_CACHE_TTL: int = 300  # 5 minutes in seconds
     LEGACY_ITEM_OWNER: Optional[str] = None  # attributes pre-ownership-tracking items; see auth/ownership.py
+    PLAID_INTERNAL_SECRET: Optional[str] = None  # gates /internal/* routes (#146); see server.py
 
     @classmethod
     def load(cls) -> "Config":
@@ -69,6 +70,7 @@ class Config:
         config.MCP_PORT = get_env_int("MCP_PORT", 8000)
         config.BALANCE_CACHE_TTL = get_env_int("BALANCE_CACHE_TTL", 300)
         config.LEGACY_ITEM_OWNER = os.getenv("LEGACY_ITEM_OWNER")
+        config.PLAID_INTERNAL_SECRET = os.getenv("PLAID_INTERNAL_SECRET")
 
         return config
 
