@@ -53,6 +53,16 @@ MCP_PORT=8000
 
 # Caching (optional)
 BALANCE_CACHE_TTL=300  # seconds, default: 300 (5 minutes)
+
+# Self-serve connect (#146, optional -- only needed if mcp-auth-gateway's
+# hosted Plaid Link page is in use). Gates two localhost-only FastMCP
+# custom routes, POST /internal/link-token and POST /internal/exchange,
+# that the gateway calls to mint a Link token and complete an exchange
+# without going through the MCP protocol at all (a plain browser POST has
+# no MCP Context/X-User-Id header). Never exposed via nginx; this header
+# check is defense-in-depth on top of that network boundary. See
+# imessage-bot's SELF_SERVE_AUTH_PLAN.md for the full flow.
+PLAID_INTERNAL_SECRET=<shared secret, generate with: openssl rand -base64 32>
 ```
 
 ### Example .env File
