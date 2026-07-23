@@ -111,6 +111,37 @@ class TokenManager:
             logger.error(f"Failed to decrypt token for {item_id}: {e}")
             return None
 
+    async def get_metadata(self, item_id: str) -> Optional[Dict[str, str]]:
+        """
+        Retrieve an item's metadata (institution name, created_at) without
+        decrypting/returning the access_token itself -- for tool responses
+        that leave this process (list_items), where the token must never
+        appear.
+
+        Args:
+            item_id: Item identifier
+
+        Returns:
+            Dict with "institution" and "created_at" keys, or None if not
+            found/undecryptable.
+        """
+        token_file = self._get_token_file(item_id)
+
+        if not token_file.exists():
+            return None
+
+        try:
+            encrypted = token_file.read_text()
+            decrypted = self.encryptor.decrypt(encrypted)
+            token_data = json.loads(decrypted)
+            return {
+                "institution": token_data.get("metadata", {}).get("institution", "Unknown"),
+                "created_at": token_data.get("created_at", ""),
+            }
+        except Exception as e:
+            logger.error(f"Failed to decrypt metadata for {item_id}: {e}")
+            return None
+
     async def remove_token(self, item_id: str) -> None:
         """
         Remove stored token.

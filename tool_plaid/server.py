@@ -17,6 +17,7 @@ from tool_plaid.tools.transactions import (
     get_transactions_by_date,
     get_balance,
     exchange_public_token,
+    list_items,
     perform_exchange,
 )
 
@@ -51,6 +52,7 @@ mcp = FastMCP(
 
 # Register tools
 mcp.tool()(exchange_public_token)
+mcp.tool()(list_items)
 mcp.tool()(get_transactions_by_date)
 mcp.tool()(get_balance)
 

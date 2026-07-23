@@ -76,6 +76,20 @@ class ExchangeTokenInput(BaseModel):
     )
 
 
+class PlaidItem(BaseModel):
+    """A single linked item, as surfaced to a caller (no access_token)."""
+
+    item_id: str = Field(description="Plaid item identifier -- pass this to get_balance/get_transactions_by_date")
+    institution: str = Field(default="Unknown", description="Linked institution name")
+    linked_at: str = Field(default="", description="When this item was linked (ISO timestamp)")
+
+
+class ListItemsResponse(BaseModel):
+    """Response for list_items tool."""
+
+    items: List[PlaidItem] = Field(default_factory=list)
+
+
 class GetBalanceResponse(BaseModel):
     """Response for get_balance tool."""
 
@@ -158,6 +172,50 @@ async def exchange_public_token(
     """
     logger.info("exchange_public_token called")
     return await perform_exchange(_caller_user_id(ctx), public_token, institution_name)
+
+
+async def list_items(ctx: Context) -> ListItemsResponse:
+    """
+    List every Plaid item (linked bank/card account) belonging to the
+    calling user. Call this first when you don't already know which
+    item_id to use -- there's no single "current account" concept, and a
+    person can have more than one item linked (e.g. cards from different
+    issuers). If this returns more than one item, ask which account rather
+    than guessing.
+
+    Returns:
+        ListItemsResponse with each item's item_id, institution, and
+        linked_at -- never an access_token.
+    """
+    logger.info("list_items called")
+
+    config = Config.load()
+    token_manager = TokenManager(config.data_dir, config.ENCRYPTION_KEY)
+    ownership = ItemOwnership(config.data_dir)
+
+    user_id = _caller_user_id(ctx)
+    if user_id is None:
+        return ListItemsResponse(items=[])
+
+    all_item_ids = await token_manager.list_items()
+
+    items = []
+    for item_id in all_item_ids:
+        if not await ownership.is_owner(user_id, item_id, legacy_owner=config.LEGACY_ITEM_OWNER):
+            continue
+        metadata = await token_manager.get_metadata(item_id)
+        if metadata is None:
+            continue
+        items.append(
+            PlaidItem(
+                item_id=item_id,
+                institution=metadata["institution"],
+                linked_at=metadata["created_at"],
+            )
+        )
+
+    logger.info(f"list_items completed: {len(items)} item(s) for {user_id}")
+    return ListItemsResponse(items=items)
 
 
 async def get_transactions_by_date(
